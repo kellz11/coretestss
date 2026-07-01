@@ -1,4 +1,3 @@
-# Triggered after repository initialization
 name: Import exact uploaded Core Search
 
 on:
@@ -22,16 +21,16 @@ jobs:
           path: target
           fetch-depth: 0
 
-      - name: Check out staged upload source
-        uses: actions/checkout@v4
-        with:
-          repository: kellz11/core-search
-          ref: main
-          path: source
-          fetch-depth: 1
-          sparse-checkout: |
-            .sync-upload
-          sparse-checkout-cone-mode: false
+      - name: Download exact staged upload chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/core-chunks
+          base="https://raw.githubusercontent.com/kellz11/core-search/main/.sync-upload"
+          for name in chunk00.txt chunk01.txt chunk02.txt chunk03.txt chunk04.txt chunk05a.hex chunk05b.hex; do
+            echo "Downloading $name"
+            curl -fL --retry 5 --retry-delay 3 "$base/$name" -o "/tmp/core-chunks/$name"
+          done
 
       - name: Reconstruct and verify exact uploaded ZIP
         shell: bash
@@ -42,32 +41,27 @@ jobs:
           import base64
           import hashlib
 
-          chunk_dir = Path('source/.sync-upload')
-          chunks = sorted(chunk_dir.glob('chunk*'))
-          if not chunks:
-              raise SystemExit('No staged upload chunks were found in the source repository.')
-
+          chunk_dir = Path('/tmp/core-chunks')
+          names = [
+              'chunk00.txt', 'chunk01.txt', 'chunk02.txt', 'chunk03.txt',
+              'chunk04.txt', 'chunk05a.hex', 'chunk05b.hex'
+          ]
           encoded_parts = []
-          print('Reading upload chunks:')
-          for path in chunks:
-              print(f'  {path.name}')
+          for name in names:
+              path = chunk_dir / name
               text = ''.join(path.read_text(encoding='utf-8').split())
               if path.suffix == '.txt':
                   encoded_parts.append(text)
-              elif path.suffix == '.hex':
-                  encoded_parts.append(bytes.fromhex(text).decode('ascii'))
               else:
-                  raise SystemExit(f'Unexpected chunk type: {path.name}')
+                  encoded_parts.append(bytes.fromhex(text).decode('ascii'))
 
           archive = base64.b64decode(''.join(encoded_parts), validate=True)
           digest = hashlib.sha256(archive).hexdigest()
           expected = '889c7216e19d732c71595261eb48a778806602e83ad302e21341176b7b2d98de'
-
           print(f'Reconstructed ZIP size: {len(archive):,} bytes')
           print(f'SHA-256: {digest}')
           if digest != expected:
               raise SystemExit(f'Checksum mismatch. Expected {expected}, received {digest}.')
-
           Path('/tmp/core-search-main2.zip').write_bytes(archive)
           PY
 
