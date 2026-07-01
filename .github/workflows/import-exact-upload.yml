@@ -1,4 +1,4 @@
-name: Seed Core Search from full source repository
+name: Compare Core Search baseline
 
 on:
   push:
@@ -12,90 +12,42 @@ permissions:
   contents: write
 
 jobs:
-  seed:
+  compare:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out new repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          path: target
           fetch-depth: 0
-
-      - name: Check out full Core Search source
-        uses: actions/checkout@v4
-        with:
-          repository: kellz11/core-search
-          ref: main
-          path: source
-          fetch-depth: 1
-
-      - name: Copy site while preserving temporary workflows
-        shell: bash
+      - name: Summarize baseline manifest
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          from collections import defaultdict
           import hashlib
-          import shutil
+          import json
 
-          target = Path('target')
-          source = Path('source')
+          manifest = Path('.source-manifest.sha256').read_text(encoding='utf-8').splitlines()
+          groups = defaultdict(list)
+          for line in manifest:
+              digest, path = line.split('  ', 1)
+              top = path.split('/', 1)[0]
+              groups[top].append((path, digest))
 
-          for child in list(target.iterdir()):
-              if child.name in {'.git', '.github'}:
-                  continue
-              if child.is_dir():
-                  shutil.rmtree(child)
-              else:
-                  child.unlink()
-
-          target_github = target / '.github'
-          target_github.mkdir(exist_ok=True)
-          for child in list(target_github.iterdir()):
-              if child.name == 'workflows':
-                  continue
-              if child.is_dir():
-                  shutil.rmtree(child)
-              else:
-                  child.unlink()
-
-          def copy_entry(src: Path, dst: Path) -> None:
-              if src.is_dir():
-                  shutil.copytree(src, dst, dirs_exist_ok=True)
-              else:
-                  dst.parent.mkdir(parents=True, exist_ok=True)
-                  shutil.copy2(src, dst)
-
-          for child in source.iterdir():
-              if child.name in {'.git', '.sync-upload'}:
-                  continue
-              if child.name == '.github':
-                  for github_child in child.iterdir():
-                      if github_child.name == 'workflows':
-                          continue
-                      copy_entry(github_child, target_github / github_child.name)
-                  continue
-              copy_entry(child, target / child.name)
-
-          manifest = []
-          for path in sorted(target.rglob('*'), key=lambda p: p.as_posix()):
-              if not path.is_file():
-                  continue
-              relative = path.relative_to(target).as_posix()
-              if relative.startswith('.git/') or relative.startswith('.github/workflows/'):
-                  continue
-              if relative == '.source-manifest.sha256':
-                  continue
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
-              manifest.append(f'{digest}  {relative}')
-          (target / '.source-manifest.sha256').write_text('\n'.join(manifest) + '\n', encoding='utf-8')
+          summary = {
+              'line_count': len(manifest),
+              'manifest_sha256': hashlib.sha256(('\n'.join(manifest) + '\n').encode()).hexdigest(),
+              'groups': {}
+          }
+          for group, entries in sorted(groups.items()):
+              text = ''.join(f'{digest}  {path}\n' for path, digest in entries)
+              summary['groups'][group] = {
+                  'count': len(entries),
+                  'sha256': hashlib.sha256(text.encode()).hexdigest()
+              }
+          Path('BASELINE_SUMMARY.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
           PY
-
-      - name: Commit full site base
-        shell: bash
-        working-directory: target
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Seed full Core Search site for exact ZIP comparison"
-          git push origin HEAD:main
+          git add BASELINE_SUMMARY.json
+          git commit -m "Record Core Search baseline hashes"
+          git push
