@@ -1,0 +1,25 @@
+name: Verify repository automation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-actions.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm Actions can write
+        run: |
+          printf 'GitHub Actions started successfully.\n' > ACTIONS_WORKING.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ACTIONS_WORKING.txt
+          git commit -m "Confirm repository automation"
+          git push
