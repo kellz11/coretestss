@@ -1,4 +1,4 @@
-name: Import exact uploaded Core Search
+name: Seed Core Search from full source repository
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  import:
+  seed:
     runs-on: ubuntu-latest
     steps:
       - name: Check out new repository
@@ -21,106 +21,32 @@ jobs:
           path: target
           fetch-depth: 0
 
-      - name: Import exact project with full diagnostics
+      - name: Check out full Core Search source
+        uses: actions/checkout@v4
+        with:
+          repository: kellz11/core-search
+          ref: main
+          path: source
+          fetch-depth: 1
+
+      - name: Replace new repository with the full site base
         shell: bash
         run: |
-          set -Eeuo pipefail
-          exec > >(tee /tmp/core-import.log) 2>&1
-          stage="starting"
+          set -euo pipefail
+          rm -rf source/.git source/.sync-upload
+          rm -f source/.github/workflows/install-uploaded-core-search.yml
 
-          commit_status() {
-            local filename="$1"
-            local message="$2"
-            printf '%s\n' "$message" > "target/$filename"
-            git -C target add "$filename"
-            git -C target commit -m "$message" || true
-            git -C target push origin HEAD:main
-          }
-
-          fail_report() {
-            local code=$?
-            set +e
-            printf 'Import failed during: %s\nExit code: %s\n' "$stage" "$code" > target/IMPORT_FAILED.txt
-            cp /tmp/core-import.log target/IMPORT_LOG.txt
-            git -C target config user.name "github-actions[bot]"
-            git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git -C target add IMPORT_FAILED.txt IMPORT_LOG.txt
-            git -C target commit -m "Record detailed Core Search import failure" || true
-            git -C target push origin HEAD:main || true
-            exit "$code"
-          }
-          trap fail_report ERR
-
-          git -C target config user.name "github-actions[bot]"
-          git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          commit_status IMPORT_1_STARTED.txt "Core Search import started"
-
-          stage="downloading the seven upload chunks"
-          mkdir -p /tmp/core-chunks
-          base="https://raw.githubusercontent.com/kellz11/core-search/main/.sync-upload"
-          for name in chunk00.txt chunk01.txt chunk02.txt chunk03.txt chunk04.txt chunk05a.hex chunk05b.hex; do
-            echo "Downloading $name"
-            curl -fL --retry 5 --retry-delay 3 "$base/$name" -o "/tmp/core-chunks/$name"
-            wc -c "/tmp/core-chunks/$name"
-          done
-          commit_status IMPORT_2_DOWNLOADED.txt "Core Search upload chunks downloaded"
-
-          stage="reconstructing and verifying the uploaded ZIP"
-          python3 - <<'PY'
-          from pathlib import Path
-          import base64
-          import hashlib
-
-          chunk_dir = Path('/tmp/core-chunks')
-          names = [
-              'chunk00.txt', 'chunk01.txt', 'chunk02.txt', 'chunk03.txt',
-              'chunk04.txt', 'chunk05a.hex', 'chunk05b.hex'
-          ]
-          encoded_parts = []
-          for name in names:
-              path = chunk_dir / name
-              text = ''.join(path.read_text(encoding='utf-8').split())
-              print(name, 'characters:', len(text), 'ending:', repr(text[-12:]))
-              if path.suffix == '.txt':
-                  encoded_parts.append(text)
-              else:
-                  decoded = bytes.fromhex(text).decode('ascii')
-                  print(name, 'decoded Base64 characters:', len(decoded), 'ending:', repr(decoded[-12:]))
-                  encoded_parts.append(decoded)
-
-          encoded = ''.join(encoded_parts)
-          print('Combined Base64 characters:', len(encoded))
-          archive = base64.b64decode(encoded, validate=True)
-          digest = hashlib.sha256(archive).hexdigest()
-          expected = '889c7216e19d732c71595261eb48a778806602e83ad302e21341176b7b2d98de'
-          print(f'Reconstructed ZIP size: {len(archive):,} bytes')
-          print(f'SHA-256: {digest}')
-          if digest != expected:
-              raise SystemExit(f'Checksum mismatch. Expected {expected}, received {digest}.')
-          Path('/tmp/core-search-main2.zip').write_bytes(archive)
-          PY
-          commit_status IMPORT_3_VERIFIED.txt "Exact uploaded ZIP reconstructed and verified"
-
-          stage="extracting the project"
-          rm -rf /tmp/core-search-extracted
-          mkdir -p /tmp/core-search-extracted
-          unzip -q /tmp/core-search-main2.zip -d /tmp/core-search-extracted
-
-          source_dir=/tmp/core-search-extracted
-          entries=("$source_dir"/*)
-          if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
-            source_dir="${entries[0]}"
-          fi
-
-          test -f "$source_dir/index.html"
-          test -f "$source_dir/app.js"
-          test -f "$source_dir/README.md"
-          test -d "$source_dir/assets"
-          test -d "$source_dir/ui"
-
-          stage="committing the exact project"
           find target -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a "$source_dir"/. target/
-          git -C target add -A
-          git -C target commit -m "Import exact uploaded Core Search project"
-          git -C target push origin HEAD:main
+          cp -a source/. target/
+
+          cd target
+          find . -type f \
+            ! -path './.git/*' \
+            ! -name '.source-manifest.sha256' \
+            -print0 | sort -z | xargs -0 sha256sum > .source-manifest.sha256
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Seed full Core Search site for exact ZIP comparison"
+          git push origin HEAD:main
