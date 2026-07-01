@@ -21,6 +21,16 @@ jobs:
           path: target
           fetch-depth: 0
 
+      - name: Mark seed started
+        shell: bash
+        run: |
+          echo "Full source seed started." > target/SEED_1_STARTED.txt
+          git -C target config user.name "github-actions[bot]"
+          git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C target add SEED_1_STARTED.txt
+          git -C target commit -m "Start full Core Search seed"
+          git -C target push origin HEAD:main
+
       - name: Check out full Core Search source
         uses: actions/checkout@v4
         with:
@@ -28,6 +38,14 @@ jobs:
           ref: main
           path: source
           fetch-depth: 1
+
+      - name: Mark source checkout complete
+        shell: bash
+        run: |
+          echo "Full source repository checkout completed." > target/SEED_2_SOURCE_READY.txt
+          git -C target add SEED_2_SOURCE_READY.txt
+          git -C target commit -m "Complete full Core Search checkout"
+          git -C target push origin HEAD:main
 
       - name: Replace new repository with the full site base
         shell: bash
@@ -45,8 +63,18 @@ jobs:
             ! -name '.source-manifest.sha256' \
             -print0 | sort -z | xargs -0 sha256sum > .source-manifest.sha256
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Seed full Core Search site for exact ZIP comparison"
           git push origin HEAD:main
+
+      - name: Record seed failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "The full source seed workflow failed. Check the latest Actions run for the failed step." > target/SEED_FAILED.txt
+          git -C target config user.name "github-actions[bot]"
+          git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C target add SEED_FAILED.txt
+          git -C target commit -m "Record full Core Search seed failure" || true
+          git -C target push origin HEAD:main || true
