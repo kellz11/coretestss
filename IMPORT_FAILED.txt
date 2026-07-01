@@ -1,2 +1,0 @@
-Import failed during: reconstructing and verifying the uploaded ZIP
-Exit code: 1

@@ -1,58 +1,0 @@
-On branch main
-Your branch is up to date with 'origin/main'.
-
-nothing to commit, working tree clean
-Everything up-to-date
-Downloading chunk00.txt
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  54617      0 --:--:-- --:--:-- --:--:-- 54794
-8000 /tmp/core-chunks/chunk00.txt
-Downloading chunk01.txt
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  50367      0 --:--:-- --:--:-- --:--:-- 50632
-8000 /tmp/core-chunks/chunk01.txt
-Downloading chunk02.txt
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  42994      0 --:--:-- --:--:-- --:--:-- 43243
-8000 /tmp/core-chunks/chunk02.txt
-Downloading chunk03.txt
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  50742      0 --:--:-- --:--:-- --:--:-- 50632100  8000  100  8000    0     0  50722      0 --:--:-- --:--:-- --:--:-- 50632
-8000 /tmp/core-chunks/chunk03.txt
-Downloading chunk04.txt
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  46282      0 --:--:-- --:--:-- --:--:-- 46511
-8000 /tmp/core-chunks/chunk04.txt
-Downloading chunk05a.hex
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  49505      0 --:--:-- --:--:-- --:--:-- 49689
-8000 /tmp/core-chunks/chunk05a.hex
-Downloading chunk05b.hex
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  8000  100  8000    0     0  43713      0 --:--:-- --:--:-- --:--:-- 43956
-8000 /tmp/core-chunks/chunk05b.hex
-On branch main
-Your branch is up to date with 'origin/main'.
-
-nothing to commit, working tree clean
-Everything up-to-date
-chunk00.txt characters: 8000 ending: 'rSoNaE/JtGFg'
-chunk01.txt characters: 8000 ending: 'RXqNtNDfM7sD'
-chunk02.txt characters: 8000 ending: 'eCqhsBlp9xb0'
-chunk03.txt characters: 8000 ending: 'JSdPTGqDEyAA'
-chunk04.txt characters: 8000 ending: 'VKE6UHKSVOD8'
-chunk05a.hex characters: 8000 ending: '394963762b67'
-chunk05a.hex decoded Base64 characters: 4000 ending: 'iB2j8R9Icv+g'
-chunk05b.hex characters: 8000 ending: '554b72697661'
-chunk05b.hex decoded Base64 characters: 4000 ending: 'rrHRQaUKriva'
-Combined Base64 characters: 48000
-Reconstructed ZIP size: 36,000 bytes
-SHA-256: 01e6b45e4c75289dfb04ee215bd1ef9af5ce65fbad739fadcba97a451268cf8e
-Checksum mismatch. Expected 889c7216e19d732c71595261eb48a778806602e83ad302e21341176b7b2d98de, received 01e6b45e4c75289dfb04ee215bd1ef9af5ce65fbad739fadcba97a451268cf8e.
