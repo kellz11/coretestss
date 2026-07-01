@@ -1,4 +1,4 @@
-name: Verify Core Search baseline
+name: Locate Core Search differences
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Write baseline summary
+      - name: Write detailed source inventory
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -24,25 +24,31 @@ jobs:
           import json
 
           lines = Path('.source-manifest.sha256').read_text(encoding='utf-8').splitlines()
-          groups = defaultdict(list)
+          assets = defaultdict(list)
+          ui = []
           for line in lines:
               digest, path = line.split('  ', 1)
-              groups[path.split('/', 1)[0]].append(line)
+              if path.startswith('assets/'):
+                  parts = path.split('/')
+                  key = '/'.join(parts[:3]) if len(parts) >= 3 else '/'.join(parts[:-1])
+                  assets[key].append(line)
+              elif path.startswith('ui/'):
+                  ui.append(line)
+
           result = {
-              'line_count': len(lines),
-              'manifest_sha256': hashlib.sha256(('\n'.join(lines) + '\n').encode()).hexdigest(),
-              'groups': {
+              'asset_groups': {
                   name: {
                       'count': len(entries),
                       'sha256': hashlib.sha256(('\n'.join(entries) + '\n').encode()).hexdigest()
                   }
-                  for name, entries in sorted(groups.items())
-              }
+                  for name, entries in sorted(assets.items())
+              },
+              'ui': ui
           }
-          Path('BASELINE_SUMMARY.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+          Path('DETAILED_SOURCE_INVENTORY.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add BASELINE_SUMMARY.json
-          git commit -m "Record exact baseline summary"
+          git add DETAILED_SOURCE_INVENTORY.json
+          git commit -m "Record detailed source inventory"
           git push
