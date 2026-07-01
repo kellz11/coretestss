@@ -1,3 +1,4 @@
+# Triggered after repository initialization
 name: Import exact uploaded Core Search
 
 on:
