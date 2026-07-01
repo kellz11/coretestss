@@ -21,21 +21,48 @@ jobs:
           path: target
           fetch-depth: 0
 
-      - name: Download exact staged upload chunks
+      - name: Import exact project with progress reporting
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          stage="starting"
+
+          commit_status() {
+            local filename="$1"
+            local message="$2"
+            printf '%s\n' "$message" > "target/$filename"
+            git -C target add "$filename"
+            git -C target commit -m "$message" || true
+            git -C target push origin HEAD:main
+          }
+
+          fail_report() {
+            local code=$?
+            set +e
+            printf 'Import failed during: %s\nExit code: %s\n' "$stage" "$code" > target/IMPORT_FAILED.txt
+            git -C target config user.name "github-actions[bot]"
+            git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git -C target add IMPORT_FAILED.txt
+            git -C target commit -m "Record Core Search import failure" || true
+            git -C target push origin HEAD:main || true
+            exit "$code"
+          }
+          trap fail_report ERR
+
+          git -C target config user.name "github-actions[bot]"
+          git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          commit_status IMPORT_1_STARTED.txt "Core Search import started"
+
+          stage="downloading the seven upload chunks"
           mkdir -p /tmp/core-chunks
           base="https://raw.githubusercontent.com/kellz11/core-search/main/.sync-upload"
           for name in chunk00.txt chunk01.txt chunk02.txt chunk03.txt chunk04.txt chunk05a.hex chunk05b.hex; do
             echo "Downloading $name"
             curl -fL --retry 5 --retry-delay 3 "$base/$name" -o "/tmp/core-chunks/$name"
           done
+          commit_status IMPORT_2_DOWNLOADED.txt "Core Search upload chunks downloaded"
 
-      - name: Reconstruct and verify exact uploaded ZIP
-        shell: bash
-        run: |
-          set -euo pipefail
+          stage="reconstructing and verifying the uploaded ZIP"
           python3 - <<'PY'
           from pathlib import Path
           import base64
@@ -64,11 +91,9 @@ jobs:
               raise SystemExit(f'Checksum mismatch. Expected {expected}, received {digest}.')
           Path('/tmp/core-search-main2.zip').write_bytes(archive)
           PY
+          commit_status IMPORT_3_VERIFIED.txt "Exact uploaded ZIP reconstructed and verified"
 
-      - name: Replace repository with uploaded project
-        shell: bash
-        run: |
-          set -euo pipefail
+          stage="extracting the project"
           rm -rf /tmp/core-search-extracted
           mkdir -p /tmp/core-search-extracted
           unzip -q /tmp/core-search-main2.zip -d /tmp/core-search-extracted
@@ -85,16 +110,9 @@ jobs:
           test -d "$source_dir/assets"
           test -d "$source_dir/ui"
 
+          stage="committing the exact project"
           find target -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a "$source_dir"/. target/
-
-      - name: Commit exact project to main
-        shell: bash
-        working-directory: target
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Import exact uploaded Core Search project"
-          git push origin HEAD:main
+          git -C target add -A
+          git -C target commit -m "Import exact uploaded Core Search project"
+          git -C target push origin HEAD:main
