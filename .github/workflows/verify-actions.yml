@@ -1,4 +1,4 @@
-name: Verify repository automation
+name: Verify Core Search baseline
 
 on:
   push:
@@ -15,11 +15,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Confirm Actions can write
+      - name: Write baseline summary
         run: |
-          printf 'GitHub Actions started successfully.\n' > ACTIONS_WORKING.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import defaultdict
+          import hashlib
+          import json
+
+          lines = Path('.source-manifest.sha256').read_text(encoding='utf-8').splitlines()
+          groups = defaultdict(list)
+          for line in lines:
+              digest, path = line.split('  ', 1)
+              groups[path.split('/', 1)[0]].append(line)
+          result = {
+              'line_count': len(lines),
+              'manifest_sha256': hashlib.sha256(('\n'.join(lines) + '\n').encode()).hexdigest(),
+              'groups': {
+                  name: {
+                      'count': len(entries),
+                      'sha256': hashlib.sha256(('\n'.join(entries) + '\n').encode()).hexdigest()
+                  }
+                  for name, entries in sorted(groups.items())
+              }
+          }
+          Path('BASELINE_SUMMARY.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ACTIONS_WORKING.txt
-          git commit -m "Confirm repository automation"
+          git add BASELINE_SUMMARY.json
+          git commit -m "Record exact baseline summary"
           git push
