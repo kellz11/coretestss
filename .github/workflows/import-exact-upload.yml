@@ -1,4 +1,4 @@
-name: Compare Core Search baseline
+name: Import exact uploaded Core Search
 
 on:
   push:
@@ -12,42 +12,84 @@ permissions:
   contents: write
 
 jobs:
-  compare:
+  import:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out destination repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Summarize baseline manifest
+
+      - name: Retrieve staged uploaded package
+        shell: bash
         run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/kellz11/core-search.git /tmp/core-source
+
           python3 - <<'PY'
           from pathlib import Path
-          from collections import defaultdict
+          import base64
           import hashlib
-          import json
 
-          manifest = Path('.source-manifest.sha256').read_text(encoding='utf-8').splitlines()
-          groups = defaultdict(list)
-          for line in manifest:
-              digest, path = line.split('  ', 1)
-              top = path.split('/', 1)[0]
-              groups[top].append((path, digest))
+          chunk_dir = Path('/tmp/core-source/.sync-upload')
+          chunks = sorted(chunk_dir.glob('chunk*'))
+          if not chunks:
+              raise SystemExit('No staged upload chunks found in the source repository.')
 
-          summary = {
-              'line_count': len(manifest),
-              'manifest_sha256': hashlib.sha256(('\n'.join(manifest) + '\n').encode()).hexdigest(),
-              'groups': {}
-          }
-          for group, entries in sorted(groups.items()):
-              text = ''.join(f'{digest}  {path}\n' for path, digest in entries)
-              summary['groups'][group] = {
-                  'count': len(entries),
-                  'sha256': hashlib.sha256(text.encode()).hexdigest()
-              }
-          Path('BASELINE_SUMMARY.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
+          encoded_parts = []
+          for path in chunks:
+              text = ''.join(path.read_text(encoding='utf-8').split())
+              if path.suffix == '.txt':
+                  encoded_parts.append(text)
+              elif path.suffix == '.hex':
+                  encoded_parts.append(bytes.fromhex(text).decode('ascii'))
+              else:
+                  raise SystemExit(f'Unexpected chunk type: {path}')
+
+          archive = base64.b64decode(''.join(encoded_parts), validate=True)
+          digest = hashlib.sha256(archive).hexdigest()
+          expected = '889c7216e19d732c71595261eb48a778806602e83ad302e21341176b7b2d98de'
+          print(f'Reconstructed {len(archive):,} bytes')
+          print(f'SHA-256: {digest}')
+          if digest != expected:
+              raise SystemExit(f'Checksum mismatch: expected {expected}, received {digest}')
+
+          Path('/tmp/core-search-upload.zip').write_bytes(archive)
           PY
+
+      - name: Replace repository with uploaded project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/core-extracted
+          mkdir -p /tmp/core-extracted
+          unzip -q /tmp/core-search-upload.zip -d /tmp/core-extracted
+
+          source_dir=/tmp/core-extracted
+          entries=("$source_dir"/*)
+          if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+            source_dir="${entries[0]}"
+          fi
+
+          test -f "$source_dir/index.html"
+          test -f "$source_dir/app.js"
+          test -f "$source_dir/README.md"
+          test -d "$source_dir/assets"
+          test -d "$source_dir/ui"
+
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$source_dir"/. .
+
+      - name: Commit exact uploaded project
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add BASELINE_SUMMARY.json
-          git commit -m "Record Core Search baseline hashes"
-          git push
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Repository already matches the uploaded ZIP."
+            exit 0
+          fi
+          git commit -m "Import exact uploaded Core Search project"
+          git push origin HEAD:main
