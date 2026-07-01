@@ -21,10 +21,11 @@ jobs:
           path: target
           fetch-depth: 0
 
-      - name: Import exact project with progress reporting
+      - name: Import exact project with full diagnostics
         shell: bash
         run: |
           set -Eeuo pipefail
+          exec > >(tee /tmp/core-import.log) 2>&1
           stage="starting"
 
           commit_status() {
@@ -40,10 +41,11 @@ jobs:
             local code=$?
             set +e
             printf 'Import failed during: %s\nExit code: %s\n' "$stage" "$code" > target/IMPORT_FAILED.txt
+            cp /tmp/core-import.log target/IMPORT_LOG.txt
             git -C target config user.name "github-actions[bot]"
             git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git -C target add IMPORT_FAILED.txt
-            git -C target commit -m "Record Core Search import failure" || true
+            git -C target add IMPORT_FAILED.txt IMPORT_LOG.txt
+            git -C target commit -m "Record detailed Core Search import failure" || true
             git -C target push origin HEAD:main || true
             exit "$code"
           }
@@ -59,6 +61,7 @@ jobs:
           for name in chunk00.txt chunk01.txt chunk02.txt chunk03.txt chunk04.txt chunk05a.hex chunk05b.hex; do
             echo "Downloading $name"
             curl -fL --retry 5 --retry-delay 3 "$base/$name" -o "/tmp/core-chunks/$name"
+            wc -c "/tmp/core-chunks/$name"
           done
           commit_status IMPORT_2_DOWNLOADED.txt "Core Search upload chunks downloaded"
 
@@ -77,12 +80,17 @@ jobs:
           for name in names:
               path = chunk_dir / name
               text = ''.join(path.read_text(encoding='utf-8').split())
+              print(name, 'characters:', len(text), 'ending:', repr(text[-12:]))
               if path.suffix == '.txt':
                   encoded_parts.append(text)
               else:
-                  encoded_parts.append(bytes.fromhex(text).decode('ascii'))
+                  decoded = bytes.fromhex(text).decode('ascii')
+                  print(name, 'decoded Base64 characters:', len(decoded), 'ending:', repr(decoded[-12:]))
+                  encoded_parts.append(decoded)
 
-          archive = base64.b64decode(''.join(encoded_parts), validate=True)
+          encoded = ''.join(encoded_parts)
+          print('Combined Base64 characters:', len(encoded))
+          archive = base64.b64decode(encoded, validate=True)
           digest = hashlib.sha256(archive).hexdigest()
           expected = '889c7216e19d732c71595261eb48a778806602e83ad302e21341176b7b2d98de'
           print(f'Reconstructed ZIP size: {len(archive):,} bytes')
