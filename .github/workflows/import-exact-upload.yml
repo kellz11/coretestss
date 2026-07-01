@@ -1,0 +1,105 @@
+name: Import exact uploaded Core Search
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/import-exact-upload.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out new repository
+        uses: actions/checkout@v4
+        with:
+          path: target
+          fetch-depth: 0
+
+      - name: Check out staged upload source
+        uses: actions/checkout@v4
+        with:
+          repository: kellz11/core-search
+          ref: main
+          path: source
+          fetch-depth: 1
+          sparse-checkout: |
+            .sync-upload
+          sparse-checkout-cone-mode: false
+
+      - name: Reconstruct and verify exact uploaded ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          import hashlib
+
+          chunk_dir = Path('source/.sync-upload')
+          chunks = sorted(chunk_dir.glob('chunk*'))
+          if not chunks:
+              raise SystemExit('No staged upload chunks were found in the source repository.')
+
+          encoded_parts = []
+          print('Reading upload chunks:')
+          for path in chunks:
+              print(f'  {path.name}')
+              text = ''.join(path.read_text(encoding='utf-8').split())
+              if path.suffix == '.txt':
+                  encoded_parts.append(text)
+              elif path.suffix == '.hex':
+                  encoded_parts.append(bytes.fromhex(text).decode('ascii'))
+              else:
+                  raise SystemExit(f'Unexpected chunk type: {path.name}')
+
+          archive = base64.b64decode(''.join(encoded_parts), validate=True)
+          digest = hashlib.sha256(archive).hexdigest()
+          expected = '889c7216e19d732c71595261eb48a778806602e83ad302e21341176b7b2d98de'
+
+          print(f'Reconstructed ZIP size: {len(archive):,} bytes')
+          print(f'SHA-256: {digest}')
+          if digest != expected:
+              raise SystemExit(f'Checksum mismatch. Expected {expected}, received {digest}.')
+
+          Path('/tmp/core-search-main2.zip').write_bytes(archive)
+          PY
+
+      - name: Replace repository with uploaded project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/core-search-extracted
+          mkdir -p /tmp/core-search-extracted
+          unzip -q /tmp/core-search-main2.zip -d /tmp/core-search-extracted
+
+          source_dir=/tmp/core-search-extracted
+          entries=("$source_dir"/*)
+          if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+            source_dir="${entries[0]}"
+          fi
+
+          test -f "$source_dir/index.html"
+          test -f "$source_dir/app.js"
+          test -f "$source_dir/README.md"
+          test -d "$source_dir/assets"
+          test -d "$source_dir/ui"
+
+          find target -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$source_dir"/. target/
+
+      - name: Commit exact project to main
+        shell: bash
+        working-directory: target
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import exact uploaded Core Search project"
+          git push origin HEAD:main
